@@ -2,7 +2,7 @@
 /*
  * moochart
  *
- * @version     0.1b1
+ * @version     0.2
  * @license     MIT-style license
  * @author      Johan Nordberg <norddan@gmail.com>
  * @infos       http://moochart.coneri.se
@@ -12,12 +12,495 @@
 
 var Chart = new Class({
   
-  Version: '0.1b1',
+  Implements: Options,
   
-  Implements: Options
+  options: {
+    width: 600,
+    height: 400,
+    padding: {
+      top: 20,
+      left: 40,
+      bottom: 30,
+      right: 20
+    },
+    tipFollowsMouse: true,
+    tipOffset: {
+      x: 8,
+      y: 18
+    },
+    id: null
+  },
+  
+  initialize: function(options) {    
+    this.setOptions(options);
+    this.id = this.options.id || 'Chart_' + $time();
+    this._pos = null;
+  },
+  
+  buildElement: function(){
+    var el = new Element('div', {
+      'id': this.id,
+      'class': 'moochart',
+      'styles': {
+        'width': this.options.width,
+        'height': this.options.height
+      }
+    });
+    
+    var canvas = document.createElement('canvas');
+    canvas.width = this.options.width;
+    canvas.height = this.options.height;
+    canvas.style.display = 'block';
+    
+    // jumpstart excanvas if present
+    if (typeof G_vmlCanvasManager != 'undefined') {
+      G_vmlCanvasManager.initElement(canvas);
+    }
+    
+    var overlay = new Element('div', {
+      'styles': {
+        'position': 'relative',
+        'width': this.options.width,
+        'height': this.options.height,
+        'top': -this.options.height,
+        'margin-bottom': -this.options.height
+    }});
+    
+    var hud = new Element('div', {
+      'styles': {
+        'position': 'absolute',
+        'width': this.options.width,
+        'height': this.options.height
+      }
+    }).inject(overlay);
+    
+    var tip = new Element('div', {
+      'class': 'tip',
+      'styles': {
+        'position': 'absolute',
+        'display': 'none'
+      }
+    }).inject(overlay);
+    
+    if (this.options.tipFollowsMouse)
+      overlay.addEvent('mousemove', this.moveTip.bindWithEvent(this));
+    
+    overlay.addEvents({
+      mousemove: this.mouseMove.bindWithEvent(this),
+      mouseenter: this.mouseEnter.bindWithEvent(this),
+      mouseleave: this.mouseLeave.bindWithEvent(this)
+    });
+    
+    window.addEvent('resize', this.resetPosition.bindWithEvent(this));
+    
+    el.adopt([canvas, overlay]);
+    
+    this.element = el;
+    this.canvas = canvas;
+    this.hud = hud;
+    this.overlay = overlay;
+    this.tip = tip;
+    
+    this.redraw();
+  },
+  
+  toElement: function(){
+    if (!this.element)
+      this.buildElement();
+    return this.element;
+  },
+  
+  resetPosition: function(){
+    this._pos = null;
+  },
+  
+  getPosition: function(){
+    if (!this._pos && this.element)
+      this._pos = this.element.getPosition();
+    return this._pos;
+  },
+  
+  /* takes absolute page coords and translates it relative to canvas */
+  translateCoords: function(coords){
+    var pos = this.getPosition();
+    return {
+      x: coords.x - pos.x,
+      y: coords.y - pos.y
+    };
+  },
+  
+  showTip: function(html, pos, className){
+    this.tip.set('html', html);
+    if (pos) {
+      this.tip.setStyles({
+        'left': pos.x+this.options.tipOffset.x,
+        'top': pos.y+this.options.tipOffset.y
+      });
+    }
+    if (className) {
+      this.tip.set('class', 'tip '+className);
+    }
+    this.tip.setStyle('display', 'block');
+  },
+  
+  hideTip: function(){
+    this.tip.setStyle('display', 'none');
+  },
+  
+  moveTip: function(event){
+    var pos = this.translateCoords(event.page);
+    this.tip.setStyles({
+      'left': pos.x+this.options.tipOffset.x,
+      'top': pos.y+this.options.tipOffset.y
+    });
+  },
+  
+  /* subclasses needs to implement this */
+  mouseMove: function(event){},
+  mouseEnter: function(event){},
+  mouseLeave: function(event){},
+  redraw: function(){}
   
 });
 
+Chart.Line = new Class({
+  
+  Extends: Chart,
+  
+  options: {
+    pointZoom: 1.2,
+    xlabel: {
+      steps: 10,
+      size: 10
+    },
+    ylabel: {
+      steps: 10,
+      size: 10
+    },
+    lineDefaults: {
+      color: '#000000',
+      lineWidth: 6,
+      toolTip: 'x:%x y:%y',
+      tipClass: null
+    }
+  },
+  
+  initialize: function(options) {
+    this.parent(options);
+    this.sets = [];
+    this._points = [];
+    this._active = {set: null, point: null};
+    this._drawRect = null;
+    this.needsLabelsUpdate = false;
+    this.updateDrawRect();
+  },
+  
+  add: function(data, options){
+    if (!options) var options = {};
+    // javascript is stupid :'(
+    var defaults = {};
+    for (var k in this.options.lineDefaults) {
+      defaults[k] = this.options.lineDefaults[k];
+    }
+    this.sets.unshift({
+      options: $extend(defaults, options),
+      data: data
+    });
+    this.updatePoints();
+    this.needsLabelsUpdate = true;
+  },
+  
+  buildElement: function(){
+    this.needsLabelsUpdate = true;
+    this.labels = new Element('div');
+    this.parent();
+    this.hud.adopt(this.labels);
+  },
+  
+  /* calculate drawable area */
+  updateDrawRect: function(){
+    var w = this.options.width, h = this.options.height;
+    var p = this.options.padding;
+    this._drawRect = {
+      x: p.left,
+      y: p.top,
+      width: w - (p.left + p.right),
+      height: h - (p.top + p.bottom)
+    };
+  },
+  
+  /* get min and max values for all sets */
+  getSetsRange: function(){
+    var xmax = 0, ymax = 0;
+    var xmin = Infinity, ymin = Infinity;
+    this.sets.each(function(set){
+      for (var i=0; i < set.data.length; i++) {
+        var x = set.data[i][0], y = set.data[i][1];
+        if (x > xmax) xmax = x;
+        if (y > ymax) ymax = y;
+        if (x < xmin) xmin = x;
+        if (y < ymin) ymin = y;
+      }
+    });
+    return {
+      x: {max: xmax, min: xmin},
+      y: {max: ymax, min: ymin}
+    };
+  },
+  
+  /* map data set x,y data to pixel coordinates */
+  updatePoints: function(){
+    var points = [];
+    var range = this.getSetsRange();
+    
+    var maxLineWidth = 0;
+    for (var set_idx=0; set_idx < this.sets.length; set_idx++) {
+      var lineWidth = this.sets[set_idx].options.lineWidth;
+      if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
+    }
+    maxLineWidth *= this.options.pointZoom;
+    maxLineWidth += 5;
+    
+    var rx = this._drawRect.x + maxLineWidth;    
+    var ry = this._drawRect.y + maxLineWidth;
+    var rw = this._drawRect.width - maxLineWidth * 2;
+    var rh = this._drawRect.height - maxLineWidth * 2;
+    
+    var xunit = rw / (range.x.max - range.x.min);
+    var yunit = rh / (range.y.max - range.y.min);
+    
+    for (var set_idx=0; set_idx < this.sets.length; set_idx++) {
+      var set = this.sets[set_idx];
+      points[set_idx] = [];
+      for (var data_idx=0; data_idx < set.data.length; data_idx++) {
+        var xval = set.data[data_idx][0], yval = set.data[data_idx][1]; 
+        var x = rx + ((xval - range.x.min) * xunit);
+        var y = ry + (rh - (yval - range.y.min) * yunit);
+        points[set_idx][data_idx] = [x, y];
+      }
+    }
+    
+    this._points = points;
+    this._xunit = xunit;
+    this._yunit = yunit;
+    this._xsteps = range.x.max - range.x.min;
+    this._ysteps = range.y.max - range.y.min;
+    this._maxLw = maxLineWidth;
+    this._range = range;
+  },
+  
+  updateLabels: function() {
+    var ctx = this.canvas.getContext('2d');
+    var rect = this._drawRect;
+    
+    var w = this.options.width, h = this.options.height;
+    var p = this.options.padding, lw = 1;
+    
+    this.labels.empty();
+    
+    ctx.clearRect(0, 0, rect.x, rect.y+rect.height);
+    ctx.clearRect(0, rect.y+rect.height, w, p.bottom);
+    
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(p.left-lw, p.top-lw);
+    ctx.lineTo(p.left-lw, h - p.bottom + lw);
+    ctx.lineTo(w - p.right, h - p.bottom + lw);
+    ctx.stroke();
+    
+    var xb = this._maxLw + rect.x;
+    var xu = this._xunit * this._xsteps / (this.options.xlabel.steps - 1);
+    
+    for (var i=1; i < this.options.xlabel.steps+1; i++) {
+      var x = xb+xu*(i-1), y = rect.height+rect.y;
+      var val = (xu*(i-1)) / this._xunit + this._range.x.min;
+      this.labels.adopt(this.createXLabel(x, y + 10, val));
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + 10);
+      ctx.stroke();
+    }
+    
+    var yb = p.bottom + this._maxLw;
+    var yu = this._yunit * this._ysteps / (this.options.ylabel.steps - 1);
+    
+    for (var i=1; i < this.options.ylabel.steps+1; i++) {
+      var x = rect.x, y = h-(yb+yu*(i-1));
+      var val = (yu*(i-1)) / this._yunit + this._range.y.min;
+      this.labels.adopt(this.createYLabel(x - 10, y, val));
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 10, y);
+      ctx.stroke();
+    }
+    
+    this.needsLabelsUpdate = false;
+  },
+  
+  formatXValue: function(val){
+    return Math.round(val);
+  },
+  
+  formatYValue: function(val){
+    return Math.round(val);
+  },
+  
+  createXLabel: function(x, y, val){
+    var w = this._drawRect.width/this.options.xlabel.steps;
+    return new Element('label', {
+      'text': this.formatXValue(val),
+      'class': 'x-axis',
+      'styles': {
+        'display': 'block',
+        'position': 'absolute',
+        'text-align': 'center',
+        'width': w,
+        'left': x-(w/2),
+        'top': y+3
+      }
+    });
+  },
+  
+  createYLabel: function(x, y, val){
+    var w = this.options.padding.left-10;
+    var h = this._drawRect.height/this.options.ylabel.steps;
+    return new Element('label', {
+      'text': this.formatYValue(val),
+      'class': 'y-axis',
+      'styles': {
+        'display': 'block',
+        'position': 'absolute',
+        'text-align': 'right',
+        'line-height': h,
+        'width': w-3,
+        'height': h,
+        'left': x-w,
+        'top': y-(h/2)
+      }
+    });
+  },
+  
+  redraw: function(){
+    var padding = this.options.padding;
+    var ctx = this.canvas.getContext('2d');
+    
+    // redraw everything if using excanvas
+    if (typeof G_vmlCanvasManager != 'undefined') this.needsLabelsUpdate = true;
+    
+    ctx.clearRect(
+      this.options.padding.left,
+      this.options.padding.top,
+      this.options.width,
+      this.options.height - padding.bottom - padding.top
+    );
+    
+    if (this.needsLabelsUpdate) this.updateLabels();
+    
+    ctx.lineJoin = 'bevel';
+    
+    for (var idx = this._points.length - 1; idx >= 0; idx--){
+      var set = this.sets[idx];
+      var points = this._points[idx];
+      var lineWidth = set.options.lineWidth;
+      var color = set.options.color;
+      
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = set.options.lineWidth;
+      
+      // draw lines
+      ctx.beginPath();
+      for (var i=0; i < points.length; i++) {
+        var x = points[i][0], y = points[i][1];
+        if (i == 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      };
+      ctx.stroke();
+      
+      var hasActive = (this._active.set == idx);
+      
+      // draw dots
+      for (var i=0; i < points.length; i++) {
+        if (hasActive && this._active.point == i)
+          continue; // render this later
+        ctx.beginPath();
+        ctx.arc(points[i][0], points[i][1], lineWidth, 0, Math.PI * 2, true);
+        ctx.fill();
+      };
+      
+    };
+    
+    if (this._active.set != null) {
+      // render active point
+      var p = this._points[this._active.set][this._active.point];
+      var o = this.sets[this._active.set].options;
+      var lw = o.lineWidth * this.options.pointZoom;
+      ctx.fillStyle = o.color;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], lw, 0, Math.PI * 2, true);
+      ctx.fill();
+    }
+    
+  },
+  
+  mouseMove: function(event){
+    var c = this.translateCoords(event.page);
+    var active = null;
+    
+    for (var i=0; i < this._points.length; i++) {
+      var p = this._points[i];
+      var lw = this.sets[i].options.lineWidth;
+      for (var j = p.length - 1; j >= 0; j--){
+        var cx = c.x - p[j][0], cy = c.y - p[j][1], cz = lw + 1;
+        if ((cx * cx) + (cy * cy) <= (cz * cz)) {
+          active = {set: i, point: j};
+          break;
+        }
+      }
+      if (active) break;
+    };
+    
+    if (active) {
+      if (active.set != this._active.set || active.point != this._active.point) {
+        this._active = active;
+        this.redraw();
+        var set = this.sets[active.set];
+        if (set.options.toolTip) {
+          var p = set.data[active.point], tipClass;
+          if (!this.options.tipFollowsMouse) {
+            var dp = this._points[active.set][active.point];
+            c = {x: dp[0], y: dp[1]};
+          }
+          var t = set.options.toolTip
+            .replace('%x', this.formatXValue(p[0]))
+            .replace('%y', this.formatYValue(p[1]));
+          this.showTip(t, c, set.options.tipClass); 
+        }
+      }
+    } else if (this._active.set != null || this._active.point != null) {
+      this._active = {set: null, point: null};
+      this.redraw();
+      this.hideTip();
+    }
+  }
+  
+});
+
+Chart.DateLine = new Class({
+  
+  Extends: Chart.Line,
+  
+  formatXValue: function(val){
+    var date = new Date(), r = [];
+    date.setTime(val*1000);
+    r.push(date.getDate());
+    r.push(date.getMonth()+1);
+    return r.join('/');
+  }
+  
+});
+
+/*
 Chart.Bubble = new Class({
   
   Extends: Chart,
@@ -156,7 +639,7 @@ Chart.Bubble = new Class({
         }
       }));
     }.bind(this));
-
+ 
     (this.options.ysteps + 1).times(function(i) {
       this.ynumbers.push(new Element('div', {
         text: '',
@@ -174,7 +657,7 @@ Chart.Bubble = new Class({
         }
       }));
     }.bind(this));
-
+ 
     this.overlay.adopt(this.xnumbers);
     this.overlay.adopt(this.ynumbers);
     
@@ -256,7 +739,7 @@ Chart.Bubble = new Class({
         this.ctx.moveTo(mov, this.options.height - this.paddingBottom);
       this.ctx.lineTo(mov, this.options.height - this.paddingBottom + 10);
     }.bind(this));
-
+ 
     (this.options.ysteps + 1).times(function(i) {
       var mov = this.options.height - (this.paddingBottom + this.options.bubbleSize + ystep * i);
         this.ctx.moveTo(this.paddingLeft, mov);
@@ -359,7 +842,7 @@ Chart.Bubble = new Class({
       var x = (((this.bubbles[i].x - this.xmin) / (this.xmax - this.xmin)) * this.xwork).round() + this.paddingLeft + this.options.bubbleSize;
       var y = (this.ywork - (((this.bubbles[i].y - this.ymin) / (this.ymax - this.ymin)) * this.ywork).round()) + this.paddingTop + this.options.bubbleSize;
       var z = (((this.bubbles[i].z - this.zmin) / (this.zmax - this.zmin)) * (this.options.bubbleSize - 8)).round() + 5;
-
+ 
       this.ctx.beginPath();
       this.ctx.globalAlpha = 1;
       this.ctx.fillStyle = this.bubbles[i].color;
@@ -391,3 +874,8 @@ Chart.Bubble = new Class({
     this.redraw();
   }
 });
+*/
+
+
+
+
