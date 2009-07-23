@@ -5,11 +5,119 @@
   <meta http-equiv="Content-type" content="text/html; charset=utf-8"/>
   <title>moochart</title>
   <script src="assets/js/mootools-1.2.3-core-nc.js" type="text/javascript" charset="utf-8"></script>
+  <!--[if IE]><script type="text/javascript" src="assets/js/excanvas.js"></script><![endif]-->
   <script src="../moochart.js" type="text/javascript" charset="utf-8"></script>
+  <style type="text/css" media="screen">
+    body {
+      background-image: url(assets/img/grad.png);
+      background-repeat: repeat-x;
+    }
+    .moochart  {
+      font-family: Arial;
+      width: 600px;
+      margin: 0 auto;
+      margin-top: 50px;
+      font-size: 11px;
+    }
+    .moochart label {
+      color: #000;
+    }
+    .moochart .tip {
+      height: 40px;
+      width: 40px;
+      margin-left: -20px;
+      margin-top: -20px;
+      line-height: 40px;
+      text-align: center;
+      font-weight: bold;
+      color: #fff;
+      cursor: none;
+      -moz-border-radius: 15px;
+    }
+  </style>
+  <script type="text/javascript" charset="utf-8">
+    window.addEvent('domready', function(){
+      
+      var set1 = [
+        [1246399200, 3],
+        [1246485600, 8],
+        [1246572000, 7],
+        [1246658400, 9],
+        [1246744800, 21],
+        [1246831200, 16],
+        [1246917600, 8],
+        [1247004000, 3],
+        [1247090400, 1],
+        [1247176800, 2],
+        [1247263200, 5],
+        [1247349600, 4],
+        [1247436000, 7],
+        [1247522400, 8],
+        [1247608800, 9],
+        [1247695200, 11],
+        [1247781600, 0],
+        [1247868000, 11],
+        [1247954400, 12],
+        [1248040800, 12]
+      ];
+      
+      var set2 = [
+        [1246399200, 5],
+        [1246485600, 11],
+        [1246572000, 5],
+        [1246658400, 6],
+        [1246744800, 13],
+        [1246831200, 9],
+        [1246917600, 5],
+        [1247004000, 2],
+        [1247090400, 1],
+        [1247176800, 3],
+        [1247263200, 7],
+        [1247349600, 9],
+        [1247436000, 11],
+        [1247522400, 14],
+        [1247608800, 18],
+        [1247695200, 13],
+        [1247781600, 12],
+        [1247868000, 14],
+        [1247954400, 13],
+        [1248040800, 15]
+      ];
+      
+      var chart1 = new Chart.DateLine({
+        width: 700,
+        height: 400,
+        xlabel: {
+          steps: 9
+        },
+        pointZoom: 2,
+        tipFollowsMouse: false,
+        tipOffset: {
+          x: 0,
+          y: 0
+        }
+      });
+      
+      chart1.add(set1, {
+        lineWidth: 6,
+        color: '#004080',
+        toolTip: '%y'
+      });
+      
+      chart1.add(set2, {
+        lineWidth: 6,
+        color: '#800000',
+        toolTip: '%y'
+      });
+      
+      $(chart1).inject('chart1');
+    });
+  </script>
 </head>
 <body>
   <div id="container">
-    
+    <div id="chart1"></div>
   </div>
 </body>
 </html>
+
