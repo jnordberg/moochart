@@ -185,6 +185,11 @@ Chart.Line = new Class({
     }
   },
   
+  xmax: null,
+  ymax: null,
+  xmin: Infinity,
+  ymin: Infinity,
+  
   initialize: function(options) {
     this.parent(options);
     this.sets = [];
@@ -197,7 +202,6 @@ Chart.Line = new Class({
   
   add: function(data, options){
     if (!options) var options = {};
-    // javascript is stupid :'(
     var defaults = {};
     for (var k in this.options.lineDefaults) {
       defaults[k] = this.options.lineDefaults[k];
@@ -231,8 +235,8 @@ Chart.Line = new Class({
   
   /* get min and max values for all sets */
   getSetsRange: function(){
-    var xmax = 0, ymax = 0;
-    var xmin = Infinity, ymin = Infinity;
+    var xmax = this.xmax, ymax = this.ymax
+    var xmin = this.xmin, ymin = this.ymin;
     this.sets.each(function(set){
       for (var i=0; i < set.data.length; i++) {
         var x = set.data[i][0], y = set.data[i][1];
@@ -492,9 +496,13 @@ Chart.DateLine = new Class({
   
   formatXValue: function(val){
     var date = new Date(), r = [];
+    var yearNow = date.getFullYear();
     date.setTime(val*1000);
     r.push(date.getDate());
     r.push(date.getMonth()+1);
+    if (yearNow != date.getFullYear()) {
+      r.push(date.getFullYear());
+    }
     return r.join('/');
   }
   
