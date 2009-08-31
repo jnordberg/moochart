@@ -86,10 +86,12 @@ var Chart = new Class({
       overlay.addEvent('mousemove', this.moveTip.bindWithEvent(this));
     
     overlay.addEvents({
-      mousemove: this.mouseMove.bindWithEvent(this),
       mouseenter: this.mouseEnter.bindWithEvent(this),
       mouseleave: this.mouseLeave.bindWithEvent(this)
     });
+    
+    var mouseListener = (Browser.Engine.trident) ? document : overlay;
+    mouseListener.addEvent('mousemove', this.mouseMove.bindWithEvent(this));
     
     window.addEvent('resize', this.resetPosition.bindWithEvent(this));
     
