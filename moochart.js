@@ -33,21 +33,13 @@ var Chart = new Class({
   
   initialize: function(options) {    
     this.setOptions(options);
-    this.id = this.options.id || 'Chart_' + $time();
+    this.id = this.options.id || 'MooChart_' + $time();
     this._pos = null;
   },
   
   buildElement: function(){
-    var el = new Element('div', {
-      'id': this.id,
-      'class': 'moochart',
-      'styles': {
-        'width': this.options.width,
-        'height': this.options.height
-      }
-    });
-    
     var canvas = document.createElement('canvas');
+    canvas.id = this.id;
     canvas.width = this.options.width;
     canvas.height = this.options.height;
     canvas.style.display = 'block';
@@ -57,52 +49,20 @@ var Chart = new Class({
       G_vmlCanvasManager.initElement(canvas);
     }
     
-    var overlay = new Element('div', {
-      'styles': {
-        'position': 'relative',
-        'width': this.options.width,
-        'height': this.options.height,
-        'top': -this.options.height,
-        'margin-bottom': -this.options.height
-    }});
-    
-    var hud = new Element('div', {
-      'styles': {
-        'position': 'absolute',
-        'width': this.options.width,
-        'height': this.options.height
-      }
-    }).inject(overlay);
-    
-    var tip = new Element('div', {
-      'class': 'tip',
-      'styles': {
-        'position': 'absolute',
-        'display': 'none'
-      }
-    }).inject(overlay);
-    
     if (this.options.tipFollowsMouse)
-      overlay.addEvent('mousemove', this.moveTip.bindWithEvent(this));
+      canvas.addEvent('mousemove', this.moveTip.bindWithEvent(this));
     
-    overlay.addEvents({
+    canvas.addEvents({
       mouseenter: this.mouseEnter.bindWithEvent(this),
       mouseleave: this.mouseLeave.bindWithEvent(this)
     });
     
-    var mouseListener = (Browser.Engine.trident) ? document : overlay;
+    var mouseListener = (Browser.Engine.trident) ? document : canvas;
     mouseListener.addEvent('mousemove', this.mouseMove.bindWithEvent(this));
     
     window.addEvent('resize', this.resetPosition.bindWithEvent(this));
     
-    el.adopt([canvas, overlay]);
-    
-    this.element = el;
-    this.canvas = canvas;
-    this.hud = hud;
-    this.overlay = overlay;
-    this.tip = tip;
-    
+    this.element = canvas;
     this.redraw();
   },
   
@@ -132,21 +92,11 @@ var Chart = new Class({
   },
   
   showTip: function(html, pos, className){
-    this.tip.set('html', html);
-    if (pos) {
-      this.tip.setStyles({
-        'left': pos.x+this.options.tipOffset.x,
-        'top': pos.y+this.options.tipOffset.y
-      });
-    }
-    if (className) {
-      this.tip.set('class', 'tip '+className);
-    }
-    this.tip.setStyle('display', 'block');
+    /* implement simple tooltip overlay */
   },
   
   hideTip: function(){
-    this.tip.setStyle('display', 'none');
+    
   },
   
   moveTip: function(event){
@@ -218,9 +168,7 @@ Chart.Line = new Class({
   
   buildElement: function(){
     this.needsLabelsUpdate = true;
-    this.labels = new Element('div');
     this.parent();
-    this.hud.adopt(this.labels);
   },
   
   /* calculate drawable area */
@@ -302,8 +250,6 @@ Chart.Line = new Class({
     var w = this.options.width, h = this.options.height;
     var p = this.options.padding, lw = 1;
     
-    this.labels.empty();
-    
     ctx.clearRect(0, 0, rect.x, rect.y+rect.height);
     ctx.clearRect(0, rect.y+rect.height, w, p.bottom);
     
@@ -318,29 +264,41 @@ Chart.Line = new Class({
     var xb = this._maxLw + rect.x;
     var xu = this._xunit * this._xsteps / (this.options.xlabel.steps - 1);
     
+    ctx.font = '8pt Helvetica';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    
     for (var i=1; i < this.options.xlabel.steps+1; i++) {
       var x = xb+xu*(i-1), y = rect.height+rect.y;
       var val = (xu*(i-1)) / this._xunit + this._range.x.min;
-      this.labels.adopt(this.createXLabel(x, y + 10, val));
+      
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x, y + 10);
       ctx.stroke();
+      
+      var text = this.formatXValue(val);
+      ctx.fillText(text, x, y + 14);
     }
     
     var yb = p.bottom + this._maxLw;
     var yu = this._yunit * this._ysteps / (this.options.ylabel.steps - 1);
     
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    
     for (var i=1; i < this.options.ylabel.steps+1; i++) {
       var x = rect.x, y = h-(yb+yu*(i-1));
       var val = (yu*(i-1)) / this._yunit + this._range.y.min;
-      this.labels.adopt(this.createYLabel(x - 10, y, val));
+      
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x - 10, y);
       ctx.stroke();
+      
+      var text = this.formatYValue(val);
+      ctx.fillText(text, x - 14, y);
     }
-    
     this.needsLabelsUpdate = false;
   },
   
@@ -499,13 +457,17 @@ Chart.DateLine = new Class({
   formatXValue: function(val){
     var date = new Date(), r = [];
     var yearNow = date.getFullYear();
-    date.setTime(val*1000);
-    r.push(date.getDate());
-    r.push(date.getMonth()+1);
+    date.setTime(val * 1000);
     if (yearNow != date.getFullYear()) {
       r.push(date.getFullYear());
     }
-    return r.join('/');
+    r.push(date.getMonth()+1);
+    r.push(date.getDate());
+    r = r.map(function(v){
+      v = String(v);
+      return (v.length == 1) ? '0' + v : v;
+    });
+    return r.join('-');
   }
   
 });
