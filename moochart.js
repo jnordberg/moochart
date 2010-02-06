@@ -288,13 +288,25 @@ var Chart = new Class({
   
   redraw: function(){
     var ctx = this.getCtx();
-    var rect = this.getDrawRect();
-    ctx.clearRect(0, 0, this.options.width, this.options.height);
-    this.drawLabels(ctx, rect);
-    this.drawGraph(ctx, rect);
+    if (this.sets.length > 0) {
+      var rect = this.getDrawRect();
+      ctx.clearRect(0, 0, this.options.width, this.options.height);
+      this.drawLabels(ctx, rect);
+      this.drawGraph(ctx, rect);
+    } else {
+      this.drawNoData(ctx);
+    }
+  },
+  
+  drawNoData: function(ctx){
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.font = '18pt Helvetica';
+    ctx.fillText('No data', this.options.width/2, this.options.height/2);
   },
   
   mouseMove: function(event){
+    if (this.sets.length == 0) return;
     var coords = this.translateCoords(event.page);
     var active = this.hitTest(coords);
     
