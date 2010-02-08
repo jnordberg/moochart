@@ -510,13 +510,14 @@ Chart.Line = new Class({
   setDefaults: {
     color: '#000000',
     lineWidth: 4,
-    pointZoom: 1.5
+    pointSize: 5,
+    pointZoom: 1.5,
   },
   
   hitTest: function(c){
     for (var i=0; i < this._points.pointSets.length; i++) {
       var p = this._points.pointSets[i];
-      var lw = this.sets[i].options.lineWidth;
+      var lw = this.sets[i].options.pointSize;
       for (var j = p.length - 1; j >= 0; j--){
         var cx = c.x - p[j][0], cy = c.y - p[j][1], cz = lw + 1;
         if ((cx * cx) + (cy * cy) <= (cz * cz))
@@ -546,14 +547,15 @@ Chart.Line = new Class({
       };
       ctx.stroke();
       
-      // draw dots
-      for (var i=0; i < points.length; i++) {
-        ctx.beginPath();
-        ctx.arc(points[i][0], points[i][1], lineWidth, 0, Math.PI * 2, true);
-        ctx.fill();
-      };
+      if (set.options.pointSize > 0) {
+        // draw dots
+        for (var i=0; i < points.length; i++) {
+          ctx.beginPath();
+          ctx.arc(points[i][0], points[i][1], set.options.pointSize, 0, Math.PI * 2, true);
+          ctx.fill();
+        };
+      }
     };
-    
   },
   
   drawActive: function(ctx, active){
@@ -565,7 +567,7 @@ Chart.Line = new Class({
     ctx.lineWidth = options.lineWidth;
     
     ctx.beginPath();
-    ctx.arc(point[0], point[1], options.lineWidth * options.pointZoom, 0, Math.PI * 2, true);
+    ctx.arc(point[0], point[1], options.pointSize * options.pointZoom, 0, Math.PI * 2, true);
     ctx.fill();
   }
   
