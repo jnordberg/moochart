@@ -546,30 +546,31 @@ Chart.Line = new Class({
     for (var idx = this._points.pointSets.length - 1; idx >= 0; idx--){
       var set = this.sets[idx];
       var points = this._points.pointSets[idx];
-      var lineWidth = set.options.lineWidth;
       
       ctx.strokeStyle = set.options.color;
       ctx.fillStyle = set.options.color;
       ctx.lineWidth = set.options.lineWidth;
       
-      // draw lines
-      ctx.beginPath();
-      if (set.options.smooth) {
-        var cp = this.getCurveControlPoints(points);
-        for (var i = 0; i < points.length; i++) {
-          if (i == 0) ctx.moveTo(points[0][0], points[0][1]);
-          else ctx.bezierCurveTo(cp[0][i-1][0], cp[0][i-1][1], // control point 1
-                                 cp[1][i-1][0], cp[1][i-1][1], // control point 2
-                                 points[i][0], points[i][1]);
+      if (set.options.lineWidth > 0) {
+        // draw lines
+        ctx.beginPath();
+        if (set.options.smooth) {
+          var cp = this.getCurveControlPoints(points);
+          for (var i = 0; i < points.length; i++) {
+            if (i == 0) ctx.moveTo(points[0][0], points[0][1]);
+            else ctx.bezierCurveTo(cp[0][i-1][0], cp[0][i-1][1], // control point 1
+                                   cp[1][i-1][0], cp[1][i-1][1], // control point 2
+                                   points[i][0], points[i][1]);
+          }
+        } else {
+          for (var i=0; i < points.length; i++) {
+            var x = points[i][0], y = points[i][1];
+            if (i == 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
         }
-      } else {
-        for (var i=0; i < points.length; i++) {
-          var x = points[i][0], y = points[i][1];
-          if (i == 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
+        ctx.stroke();
       }
-      ctx.stroke();
       
       if (set.options.pointSize > 0) {
         // draw dots
