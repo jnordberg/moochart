@@ -428,9 +428,9 @@ Chart.Line = new Class({
   hitTest: function(c){
     for (var i=0; i < this._points.pointSets.length; i++) {
       var p = this._points.pointSets[i];
-      var lw = this.sets[i].options.pointSize;
+      var cz = this.sets[i].options.pointSize * this.sets[i].options.pointZoom;
       for (var j = p.length - 1; j >= 0; j--){
-        var cx = c.x - p[j][0], cy = c.y - p[j][1], cz = lw + 1;
+        var cx = c.x - p[j][0], cy = c.y - p[j][1];
         if ((cx * cx) + (cy * cy) <= (cz * cz))
           return {set: i, point: j};
       }
