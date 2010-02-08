@@ -524,6 +524,7 @@ Chart.Line = new Class({
     lineWidth: 4,
     pointSize: 5,
     pointZoom: 1.5,
+    smooth: true
   },
   
   hitTest: function(c){
@@ -553,10 +554,21 @@ Chart.Line = new Class({
       
       // draw lines
       ctx.beginPath();
-      for (var i=0; i < points.length; i++) {
-        var x = points[i][0], y = points[i][1];
-        if (i == 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      };
+      if (set.options.smooth) {
+        var cp = this.getCurveControlPoints(points);
+        for (var i = 0; i < points.length; i++) {
+          if (i == 0) ctx.moveTo(points[0][0], points[0][1]);
+          else ctx.bezierCurveTo(cp[0][i-1][0], cp[0][i-1][1], // control point 1
+                                 cp[1][i-1][0], cp[1][i-1][1], // control point 2
+                                 points[i][0], points[i][1]);
+        }
+      } else {
+        for (var i=0; i < points.length; i++) {
+          var x = points[i][0], y = points[i][1];
+          if (i == 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+      }
       ctx.stroke();
       
       if (set.options.pointSize > 0) {
@@ -568,6 +580,47 @@ Chart.Line = new Class({
         };
       }
     };
+  },
+  
+  getCurveControlPoints: function(points){
+    var l = points.length - 1, rhs = [];
+    
+    for (var i = 1; i < l; i++)
+      rhs[i] = 4 * points[i][0] + 2 * points[i+1][0];
+    rhs[0] = points[0][0] + 2 * points[1][0];
+    rhs[l - 1] = (8 * points[l - 1][0] + points[l][0]) / 2;
+    var x = this.getFirstControlPoints(rhs);
+    
+    for (var i = 1; i < l - 1; i++)
+      rhs[i] = 4 * points[i][1] + 2 * points[i+1][1];
+    rhs[0] = points[0][1] + 2 * points[1][1];
+    rhs[l - 1] = (8 * points[l - 1][1] + points[l][1]) / 2;
+    var y = this.getFirstControlPoints(rhs);
+    
+    var cp1 = [], cp2 = [];
+    for (var i = 0; i < l; i++) {
+      cp1[i] = [x[i], y[i]];
+      if (i < l - 1)
+        cp2[i] = [2 * points[i + 1][0] - x[i + 1], 2 * points[i + 1][1] - y[i + 1]];
+      else
+        cp2[i] = [(points[l][0] + x[l-1]) / 2, (points[l][1] + y[l-1]) / 2];
+    }
+    
+    return [cp1, cp2];
+  },
+
+  getFirstControlPoints: function(rhs){
+    var l = rhs.length, x = [], tmp = [], b = 2;  
+    x[0] = rhs[0] / b;
+    for (var i = 1; i < l; i++) {
+      tmp[i] = 1 / b;
+      b = (i < l - 1 ? 4.0 : 3.5) - tmp[i];
+      x[i] = (rhs[i] - x[i - 1]) / b;
+    }
+    for (var i = 1; i < l; i++)
+      x[l - i - 1] -= tmp[l - i] * x[l - i];
+    
+    return x;
   },
   
   drawActive: function(ctx, active){
