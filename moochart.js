@@ -321,7 +321,10 @@ var Chart = new Class({
     }
   },
   mouseEnter: function(event){},
-  mouseLeave: function(event){},
+  mouseLeave: function(event){
+    this._active = {set: null, point: null};
+    this.redraw();
+  },
   
   hitTest: function(){ return false; },
   drawGraph: function(ctx, rect){},
