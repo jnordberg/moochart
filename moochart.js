@@ -127,17 +127,6 @@ var Chart = new Class({
     }).bind(this));
   },
   
-  /* draws cache stored by cacheCurrentState
-     returns true on success or false if there is no cache to restore */
-  drawCache: function(){
-    if (this.cache) {
-      var ctx = this.getCtx();
-      ctx.drawImage(this.cache, 0, 0);
-      return true;
-    }
-    return false;
-  },
-  
   clearCache: function(){
     this.cache = null;
   },
@@ -288,13 +277,18 @@ var Chart = new Class({
   
   redraw: function(){
     var ctx = this.getCtx();
-    if (this.sets.length > 0) {
-      var rect = this.getDrawRect();
-      ctx.clearRect(0, 0, this.options.width, this.options.height);
-      this.drawLabels(ctx, rect);
-      this.drawGraph(ctx, rect);
+    ctx.clearRect(0, 0, this.options.width, this.options.height);
+    if (this.cache) {
+      ctx.drawImage(this.cache, 0, 0);
     } else {
-      this.drawNoData(ctx);
+      if (this.sets.length > 0) {
+        var rect = this.getDrawRect();
+        this.drawLabels(ctx, rect);
+        this.drawGraph(ctx, rect);
+      } else {
+        this.drawNoData(ctx);
+      }
+      this.cacheCurrentState();
     }
   },
   
@@ -309,18 +303,15 @@ var Chart = new Class({
     if (this.sets.length == 0) return;
     var coords = this.translateCoords(event.page);
     var active = this.hitTest(coords);
-    
     if (active) {
       if (active.set != this._active.set || active.point != this._active.point) {
-        this.redraw(); // FIXME: Use cache!
+        this.redraw();
         this.drawActive(this.getCtx(), active);
         this._active = active;
       }
     } else if (this._active.set != null || this._active.point != null) {
       this._active = {set: null, point: null};
-      // FIXME: Use cache!
       this.redraw();
-      //this.drawCache();
     }
   },
   mouseEnter: function(event){},
