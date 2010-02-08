@@ -211,7 +211,8 @@ var Chart = new Class({
       yunit: yunit,
       xsteps: range.x.max - range.x.min,
       ysteps: range.y.max - range.y.min,
-      rect: pointRect
+      rect: pointRect,
+      range: range
     };
   },
   
@@ -223,9 +224,6 @@ var Chart = new Class({
     var p = this.options.padding;
     var lw = 1;
     
-    ctx.clearRect(0, 0, rect.x, rect.y+rect.height);
-    ctx.clearRect(0, rect.y+rect.height, w, p.bottom);
-    
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = '#000000';
     ctx.lineWidth = lw;
@@ -236,15 +234,21 @@ var Chart = new Class({
     ctx.stroke();
     
     ctx.font = '8pt Helvetica';
+    
+    this.drawXLabels(ctx, rect);
+    this.drawYLabels(ctx, rect);
+  },
+  
+  drawXLabels: function(ctx, rect){
+    var rx = this._points.rect.x;
+    var xu = this._points.xunit * this._points.xsteps / (this.options.xlabel.steps - 1);
+    
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
     
-    var rx = this._points.rect.x;
-    var xu = this._points.xunit * (range.x.max - range.x.min) / (this.options.xlabel.steps - 1);
-    
     for (var i=1; i < this.options.xlabel.steps+1; i++) {
       var x = rx+xu*(i-1), y = rect.height+rect.y;
-      var val = (xu*(i-1)) / this._points.xunit + range.x.min;
+      var val = (xu*(i-1)) / this._points.xunit + this._points.range.x.min;
       
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -254,16 +258,18 @@ var Chart = new Class({
       var text = this.formatXValue(val);
       ctx.fillText(text, x, y + 14);
     }
-    
-    var yb = p.bottom + this.innerPadding.y;
-    var yu = this._points.yunit * (range.y.max - range.y.min) / (this.options.ylabel.steps - 1);
+  },
+  
+  drawYLabels: function(ctx, rect){  
+    var yb = this.options.padding.bottom + this.innerPadding.y;
+    var yu = this._points.yunit * this._points.ysteps / (this.options.ylabel.steps - 1);
     
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
     
     for (var i=1; i < this.options.ylabel.steps+1; i++) {
-      var x = rect.x, y = h-(yb+yu*(i-1));
-      var val = (yu*(i-1)) / this._points.yunit + range.y.min;
+      var x = rect.x, y = this.options.height-(yb+yu*(i-1));
+      var val = (yu*(i-1)) / this._points.yunit + this._points.range.y.min;
       
       ctx.beginPath();
       ctx.moveTo(x, y);
