@@ -429,99 +429,6 @@ Chart.Line = new Class({
   setDefaults: {
     color: '#000000',
     lineWidth: 4,
-    pointZoom: 1.5
-  },
-  
-  hitTest: function(c){
-    for (var i=0; i < this._points.pointSets.length; i++) {
-      var p = this._points.pointSets[i];
-      var lw = this.sets[i].options.lineWidth;
-      for (var j = p.length - 1; j >= 0; j--){
-        var cx = c.x - p[j][0], cy = c.y - p[j][1], cz = lw + 1;
-        if ((cx * cx) + (cy * cy) <= (cz * cz))
-          return {set: i, point: j};
-      }
-    }
-    return null;
-  },
-  
-  drawGraph: function(ctx, rect){
-    ctx.lineJoin = 'bevel';
-    
-    for (var idx = this._points.pointSets.length - 1; idx >= 0; idx--){
-      var set = this.sets[idx];
-      var points = this._points.pointSets[idx];
-      var lineWidth = set.options.lineWidth;
-      
-      ctx.strokeStyle = set.options.color;
-      ctx.fillStyle = set.options.color;
-      ctx.lineWidth = set.options.lineWidth;
-      
-      // draw lines
-      ctx.beginPath();
-      for (var i=0; i < points.length; i++) {
-        var x = points[i][0], y = points[i][1];
-        if (i == 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      };
-      ctx.stroke();
-      
-      // draw dots
-      for (var i=0; i < points.length; i++) {
-        ctx.beginPath();
-        ctx.arc(points[i][0], points[i][1], lineWidth, 0, Math.PI * 2, true);
-        ctx.fill();
-      };
-    };
-    
-  },
-  
-  drawActive: function(ctx, active){
-    var point = this._points.pointSets[active.set][active.point];
-    var options = this.sets[active.set].options;
-    
-    ctx.strokeStyle = options.color;
-    ctx.fillStyle = options.color;
-    ctx.lineWidth = options.lineWidth;
-    
-    ctx.beginPath();
-    ctx.arc(point[0], point[1], options.lineWidth * options.pointZoom, 0, Math.PI * 2, true);
-    ctx.fill();
-  }
-  
-});
-
-Chart.DateLine = new Class({
-  
-  Extends: Chart.Line,
-  
-  formatXValue: function(val){
-    var date = new Date(), r = [];
-    var yearNow = date.getFullYear();
-    date.setTime(val * 1000);
-    if (yearNow != date.getFullYear()) {
-      r.push(date.getFullYear());
-    }
-    r.push(date.getMonth()+1);
-    r.push(date.getDate());
-    r = r.map(function(v){
-      v = String(v);
-      return (v.length == 1) ? '0' + v : v;
-    });
-    return r.join('-');
-  }
-  
-});
-
-
-
-
-Chart.Line = new Class({
-  
-  Extends: Chart,
-  
-  setDefaults: {
-    color: '#000000',
-    lineWidth: 4,
     pointSize: 5,
     pointZoom: 1.5,
     smooth: true
@@ -639,69 +546,24 @@ Chart.Line = new Class({
   
 });
 
-
-Chart.Bubble = new Class({
+Chart.DateLine = new Class({
   
-  Extends: Chart,
+  Extends: Chart.Line,
   
-  setDefaults: {
-    color: '#000000',
-  },
-  
-  hitTest: function(c){
-    for (var i=0; i < this._points.pointSets.length; i++) {
-      var p = this._points.pointSets[i];
-      var lw = this.sets[i].options.lineWidth;
-      for (var j = p.length - 1; j >= 0; j--){
-        var cx = c.x - p[j][0], cy = c.y - p[j][1], cz = lw + 1;
-        if ((cx * cx) + (cy * cy) <= (cz * cz))
-          return {set: i, point: j};
-      }
+  formatXValue: function(val){
+    var date = new Date(), r = [];
+    var yearNow = date.getFullYear();
+    date.setTime(val * 1000);
+    if (yearNow != date.getFullYear()) {
+      r.push(date.getFullYear());
     }
-    return null;
-  },
-  
-  drawGraph: function(ctx, rect){
-    ctx.lineJoin = 'bevel';
-    
-    for (var idx = this._points.pointSets.length - 1; idx >= 0; idx--){
-      var set = this.sets[idx];
-      var points = this._points.pointSets[idx];
-      var lineWidth = set.options.lineWidth;
-      
-      ctx.strokeStyle = set.options.color;
-      ctx.fillStyle = set.options.color;
-      ctx.lineWidth = set.options.lineWidth;
-      
-      // draw lines
-      ctx.beginPath();
-      for (var i=0; i < points.length; i++) {
-        var x = points[i][0], y = points[i][1];
-        if (i == 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      };
-      ctx.stroke();
-      
-      // draw dots
-      for (var i=0; i < points.length; i++) {
-        ctx.beginPath();
-        ctx.arc(points[i][0], points[i][1], lineWidth, 0, Math.PI * 2, true);
-        ctx.fill();
-      };
-    };
-    
-  },
-  
-  drawActive: function(ctx, active){
-    var point = this._points.pointSets[active.set][active.point];
-    var options = this.sets[active.set].options;
-    
-    ctx.strokeStyle = options.color;
-    ctx.fillStyle = options.color;
-    ctx.lineWidth = options.lineWidth;
-    
-    ctx.beginPath();
-    ctx.arc(point[0], point[1], options.lineWidth * options.pointZoom, 0, Math.PI * 2, true);
-    ctx.fill();
+    r.push(date.getMonth()+1);
+    r.push(date.getDate());
+    r = r.map(function(v){
+      v = String(v);
+      return (v.length == 1) ? '0' + v : v;
+    });
+    return r.join('-');
   }
   
 });
