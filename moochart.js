@@ -205,13 +205,14 @@ var Chart = new Class({
       }
     }
     
-    this._points = {
+    this.points = {
       pointSets: points,
       xunit: xunit,
       yunit: yunit,
       xsteps: range.x.max - range.x.min,
       ysteps: range.y.max - range.y.min,
-      rect: pointRect
+      rect: pointRect,
+      range: range
     };
   },
   
@@ -223,9 +224,6 @@ var Chart = new Class({
     var p = this.options.padding;
     var lw = 1;
     
-    ctx.clearRect(0, 0, rect.x, rect.y+rect.height);
-    ctx.clearRect(0, rect.y+rect.height, w, p.bottom);
-    
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = '#000000';
     ctx.lineWidth = lw;
@@ -236,15 +234,21 @@ var Chart = new Class({
     ctx.stroke();
     
     ctx.font = '8pt Helvetica';
+    
+    this.drawXLabels(ctx, rect);
+    this.drawYLabels(ctx, rect);
+  },
+  
+  drawXLabels: function(ctx, rect){
+    var rx = this.points.rect.x;
+    var xu = this.points.xunit * this.points.xsteps / (this.options.xlabel.steps - 1);
+    
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
     
-    var rx = this._points.rect.x;
-    var xu = this._points.xunit * (range.x.max - range.x.min) / (this.options.xlabel.steps - 1);
-    
     for (var i=1; i < this.options.xlabel.steps+1; i++) {
       var x = rx+xu*(i-1), y = rect.height+rect.y;
-      var val = (xu*(i-1)) / this._points.xunit + range.x.min;
+      var val = (xu*(i-1)) / this.points.xunit + this.points.range.x.min;
       
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -254,16 +258,18 @@ var Chart = new Class({
       var text = this.formatXValue(val);
       ctx.fillText(text, x, y + 14);
     }
-    
-    var yb = p.bottom + this.innerPadding.y;
-    var yu = this._points.yunit * (range.y.max - range.y.min) / (this.options.ylabel.steps - 1);
+  },
+  
+  drawYLabels: function(ctx, rect){  
+    var yb = this.options.padding.bottom + this.innerPadding.y;
+    var yu = this.points.yunit * this.points.ysteps / (this.options.ylabel.steps - 1);
     
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
     
     for (var i=1; i < this.options.ylabel.steps+1; i++) {
-      var x = rect.x, y = h-(yb+yu*(i-1));
-      var val = (yu*(i-1)) / this._points.yunit + range.y.min;
+      var x = rect.x, y = this.options.height-(yb+yu*(i-1));
+      var val = (yu*(i-1)) / this.points.yunit + this.points.range.y.min;
       
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -315,7 +321,10 @@ var Chart = new Class({
     }
   },
   mouseEnter: function(event){},
-  mouseLeave: function(event){},
+  mouseLeave: function(event){
+    this._active = {set: null, point: null};
+    this.redraw();
+  },
   
   hitTest: function(){ return false; },
   drawGraph: function(ctx, rect){},
@@ -355,8 +364,8 @@ Chart.Bar = new Class({
   },
   
   hitTest: function(c){
-    for (var set_idx=0; set_idx < this._points.pointSets.length; set_idx++) {
-      var set = this._points.pointSets[set_idx];
+    for (var set_idx=0; set_idx < this.points.pointSets.length; set_idx++) {
+      var set = this.points.pointSets[set_idx];
       for (var point_idx=0; point_idx < set.length; point_idx++) {
         var x = set[point_idx][0], y = set[point_idx][1];
         var rect = {
@@ -374,7 +383,7 @@ Chart.Bar = new Class({
   
   drawActive: function(ctx, active){
     var bw2 = this.options.barWidth / 2;
-    var point = this._points.pointSets[active.set][active.point];
+    var point = this.points.pointSets[active.set][active.point];
     var options = this.sets[active.set].options;
     var rect = this.getDrawRect();
     
@@ -384,8 +393,8 @@ Chart.Bar = new Class({
   },
   
   drawGraph: function(ctx, rect){
-    for (var set_idx=0; set_idx < this._points.pointSets.length; set_idx++) {
-      var set = this._points.pointSets[set_idx];
+    for (var set_idx=0; set_idx < this.points.pointSets.length; set_idx++) {
+      var set = this.points.pointSets[set_idx];
       ctx.fillStyle = this.sets[set_idx].options.color;
       for (var i=0; i < set.length; i++) {
         this.drawBar(ctx, rect, set[i]);
@@ -406,7 +415,7 @@ Chart.Bar = new Class({
   
   dataSetsDidChange: function(){
     this.updatePoints();
-    this.options.xlabel.steps = this._points.xsteps + 1;
+    this.options.xlabel.steps = this.points.xsteps + 1;
     this.redraw();
   },
   
@@ -425,8 +434,8 @@ Chart.Line = new Class({
   },
   
   hitTest: function(c){
-    for (var i=0; i < this._points.pointSets.length; i++) {
-      var p = this._points.pointSets[i];
+    for (var i=0; i < this.points.pointSets.length; i++) {
+      var p = this.points.pointSets[i];
       var cz = this.sets[i].options.pointSize * this.sets[i].options.pointZoom;
       for (var j = p.length - 1; j >= 0; j--){
         var cx = c.x - p[j][0], cy = c.y - p[j][1];
@@ -440,9 +449,9 @@ Chart.Line = new Class({
   drawGraph: function(ctx, rect){
     ctx.lineJoin = 'bevel';
     
-    for (var idx = this._points.pointSets.length - 1; idx >= 0; idx--){
+    for (var idx = this.points.pointSets.length - 1; idx >= 0; idx--){
       var set = this.sets[idx];
-      var points = this._points.pointSets[idx];
+      var points = this.points.pointSets[idx];
       
       ctx.strokeStyle = set.options.color;
       ctx.fillStyle = set.options.color;
@@ -522,7 +531,7 @@ Chart.Line = new Class({
   },
   
   drawActive: function(ctx, active){
-    var point = this._points.pointSets[active.set][active.point];
+    var point = this.points.pointSets[active.set][active.point];
     var options = this.sets[active.set].options;
     
     ctx.strokeStyle = options.color;
@@ -539,6 +548,10 @@ Chart.Line = new Class({
 Chart.DateLine = new Class({
   
   Extends: Chart.Line,
+  
+  drawXLabels: function(ctx, rect){
+    
+  },
   
   formatXValue: function(val){
     var date = new Date(), r = [];
