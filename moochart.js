@@ -1,22 +1,142 @@
-
 /*
- * moochart
- *
- * @version     0.3
- * @license     MIT-style license
- * @author      Johan Nordberg <norddan@gmail.com>
- * @infos       http://moochart.coneri.se
- * @copyright   Author
- *
+           (__)
+           (oo)  moochart 0.5
+    /------ (.)   Johan Nordberg <its@johan-nordberg.com>
+   / |      |      http://github.com/jnordberg/moochart
+  *  | ---- |
+     ~~    ~~
 */
 
-var Chart = new Class({
-  
+CanvasRenderingContext2D.prototype.circle = function(x, y, size){
+  this.arc(x, y, size, 0, Math.PI * 2, true);
+}
+
+CanvasRenderingContext2D.prototype.spline = function(points){
+  /* draws a bezier spline
+     ..using magic dragon dust! */
+
+  function CP(a){
+    var l = a.length, r = [], tmp = [], b = 2;
+    r[0] = a[0] / b;
+    for (var i = 1; i < l; i++) {
+      tmp[i] = 1 / b;
+      b = (i == l-1 ? 3.5 : 4.0) - tmp[i];
+      r[i] = (a[i] - r[i-1]) / b;
+    }
+    for (var i = 1; i < l; i++)
+      r[l-i-1] -= tmp[l-i] * r[l-i];
+    return r;
+  }
+
+  var l = points.length - 1, rhs = [], i;
+
+  for (i = 1; i < l; i++)
+    rhs[i] = 4 * points[i][0] + 2 * points[i+1][0];
+  rhs[0] = points[0][0] + 2 * points[1][0];
+  rhs[l - 1] = (8 * points[l-1][0] + points[l][0]) / 2;
+  var x = CP(rhs);
+
+  for (i = 1; i < l - 1; i++)
+    rhs[i] = 4 * points[i][1] + 2 * points[i+1][1];
+  rhs[0] = points[0][1] + 2 * points[1][1];
+  rhs[l - 1] = (8 * points[l - 1][1] + points[l][1]) / 2;
+  var y = CP(rhs);
+
+  var cp1 = [], cp2 = [];
+  for (i = 0; i < l; i++) {
+    cp1[i] = [x[i], y[i]];
+    if (i < l - 1)
+      cp2[i] = [2 * points[i + 1][0] - x[i + 1], 2 * points[i + 1][1] - y[i + 1]];
+    else
+      cp2[i] = [(points[l][0] + x[l-1]) / 2, (points[l][1] + y[l-1]) / 2];
+  }
+
+  this.moveTo(points[0][0], points[0][1]);
+  for (i = 1; i < points.length; i++)
+    this.bezierCurveTo(cp1[i-1][0], cp1[i-1][1], cp2[i-1][0], cp2[i-1][1], points[i][0], points[i][1]);
+}
+
+/* data models */
+// TODO: actually use these :)
+var XYSet = new Class({
   Implements: Options,
-  
+  options: {},
+  initialize: function(points, options){
+    this.setOptions(options);
+    this.points = points.map(function(point){
+      return new XYPoint(point, this);
+    }.bind(this));
+  }
+});
+var XYPoint = new Class({
+  initialize: function(point, set){
+    this.x = point[0];
+    this.y = point[1];
+    this.set = set; // reference to XYSet
+  }
+});
+
+var Canvas = new Class({
+
+  Implements: Options,
+
   options: {
     width: 600,
-    height: 400,
+    height: 400
+  },
+
+  initialize: function(options) {
+    this.setOptions(options);
+  },
+
+  buildElement: function(){
+    var canvas = document.createElement('canvas');
+    canvas.width = this.options.width;
+    canvas.height = this.options.height;
+
+    canvas.addEvents({
+      mouseenter: this.mouseEnter.bindWithEvent(this),
+      mouseleave: this.mouseLeave.bindWithEvent(this),
+      mousemove: this.mouseMove.bindWithEvent(this)
+    });
+
+    return canvas;
+  },
+
+  toElement: function(){
+    if (!this.element) {
+      this.element = this.buildElement();
+      this.redraw();
+    }
+    return this.element;
+  },
+
+  /* returns drawing context */
+  getCtx: function(){
+    return this.toElement().getContext('2d');
+  },
+
+  getDrawRect: function(){
+    return {x: 0, y: 0, width: this.options.width, height: this.options.height};
+  },
+
+  /* clears entire canvas */
+  clear: function(){
+    var rect = this.getDrawRect();
+    this.getCtx().clearRect(rect.x, rect.y, rect.width, rect.height);
+  },
+
+  /* mouse events */
+  mouseEnter: function(event){},
+  mouseLeave: function(event){},
+  mouseMove: function(event){},
+});
+
+var Chart = new Class({
+
+  Extends: Canvas,
+
+  options: {
     padding: { /* where labels live */
       top: 20,
       left: 40,
@@ -36,9 +156,9 @@ var Chart = new Class({
     labelColor: '#00000',
     labelTextColor: '#000000',
   },
-  
+
   setDefaults: {},
-  
+
   xmax: null,
   ymax: null,
   xmin: Infinity,
@@ -46,51 +166,18 @@ var Chart = new Class({
   cache: null,
   sets: [],
   innerPadding: {x: 10, y: 10},
-  
-  initialize: function(options) {    
+
+  initialize: function(options) {
     this.setOptions(options);
-    this.id = this.options.id || 'MooChart_' + $time();
+    this.id = this.options.id || 'moochart_' + $time();
     this._pos = null;
     this._active = {set: null, point: null};
   },
-  
-  buildElement: function(){
-    var canvas = document.createElement('canvas');
-    canvas.id = this.id;
-    canvas.className = this.options.className;
-    canvas.width = this.options.width;
-    canvas.height = this.options.height;
-    canvas.style.display = 'block';
-    
-    // jumpstart excanvas if present
-    if (typeof G_vmlCanvasManager != 'undefined') {
-      G_vmlCanvasManager.initElement(canvas);
-    }
-    
-    canvas.addEvents({
-      mouseenter: this.mouseEnter.bindWithEvent(this),
-      mouseleave: this.mouseLeave.bindWithEvent(this)
-    });
-    
-    var mouseListener = (Browser.Engine.trident) ? document : canvas;
-    mouseListener.addEvent('mousemove', this.mouseMove.bindWithEvent(this));
-    
-    window.addEvent('resize', this.resetPosition.bindWithEvent(this));
-    
-    this.element = canvas;
-    this.redraw();
-  },
-  
-  toElement: function(){
-    if (!this.element)
-      this.buildElement();
-    return this.element;
-  },
-  
+
   resetPosition: function(){
     this._pos = null;
   },
-  
+
   getPosition: function(){
     if (!this._pos && this.element)
       this._pos = this.element.getPosition();
@@ -337,7 +424,6 @@ var Chart = new Class({
   },
   formatXValue: function(value){ return Math.round(value); },
   formatYValue: function(value){ return Math.round(value); },
-  
 });
 
 
@@ -461,13 +547,7 @@ Chart.Line = new Class({
         // draw lines
         ctx.beginPath();
         if (set.options.smooth) {
-          var cp = this.getCurveControlPoints(points);
-          for (var i = 0; i < points.length; i++) {
-            if (i == 0) ctx.moveTo(points[0][0], points[0][1]);
-            else ctx.bezierCurveTo(cp[0][i-1][0], cp[0][i-1][1], // control point 1
-                                   cp[1][i-1][0], cp[1][i-1][1], // control point 2
-                                   points[i][0], points[i][1]);
-          }
+          ctx.spline(points);
         } else {
           for (var i=0; i < points.length; i++) {
             var x = points[i][0], y = points[i][1];
@@ -546,20 +626,40 @@ Chart.Line = new Class({
 });
 
 Chart.DateLine = new Class({
+  // TODO: add options for how to draw the date
   
   Extends: Chart.Line,
   
   drawXLabels: function(ctx, rect){
+    var rx = this.points.rect.x;
+    var xu = this.points.xunit * this.points.xsteps / (this.options.xlabel.steps - 1);
     
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    
+    for (var i=1; i < this.options.xlabel.steps+1; i++) {
+      var x = rx+xu*(i-1), y = rect.height+rect.y;
+      var val = (xu*(i-1)) / this.points.xunit + this.points.range.x.min;
+      
+      var d = new Date();
+      d.setTime(val * 1000);
+    
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + 10);
+      ctx.stroke();
+    
+      var text = this.formatXValue(val);
+      ctx.fillText(text, x, y + 14);
+    }
   },
   
   formatXValue: function(val){
     var date = new Date(), r = [];
     var yearNow = date.getFullYear();
     date.setTime(val * 1000);
-    if (yearNow != date.getFullYear()) {
+    if (yearNow != date.getFullYear())
       r.push(date.getFullYear());
-    }
     r.push(date.getMonth()+1);
     r.push(date.getDate());
     r = r.map(function(v){
