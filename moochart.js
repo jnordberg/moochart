@@ -356,7 +356,6 @@ Chart.Bar = new Class({
   },
   
   ymin: 0,
-  ymax: 100,
   
   initialize: function(options) {
     this.parent(options);
