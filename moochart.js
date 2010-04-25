@@ -58,12 +58,9 @@ CanvasRenderingContext2D.prototype.spline = function(points){
 
 /* data models */
 
-var XYCollection = new Native({
-  name: 'XYCollection',
-  legacy: Array,
-});
+var XYCollection = new Class({
 
-XYCollection.implement({
+  Extends: Array,
 
   // return max and min x and y values for all sets
   range: function(){
