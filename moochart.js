@@ -267,6 +267,7 @@ var Chart = new Class({
   
   /* map sets data xy values to pixel coordinates */
   updatePoints: function(){
+    this.pointsWillChange();
     var rect = this.getDrawRect();
     var range = this.getSetsRange();
     var pointRect = {
@@ -301,6 +302,7 @@ var Chart = new Class({
       rect: pointRect,
       range: range
     };
+    this.pointsDidChange();
   },
   
   drawLabels: function(ctx, rect){
@@ -416,6 +418,9 @@ var Chart = new Class({
   hitTest: function(){ return false; },
   drawGraph: function(ctx, rect){},
   drawActive: function(ctx, point){},
+  
+  pointsWillChange: function(){},
+  pointsDidChange: function(){},
   
   dataSetsWillChange: function(){},
   dataSetsDidChange: function(){
