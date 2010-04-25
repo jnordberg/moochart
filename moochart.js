@@ -57,24 +57,72 @@ CanvasRenderingContext2D.prototype.spline = function(points){
 }
 
 /* data models */
-// TODO: actually use these :)
-var XYSet = new Class({
-  Implements: Options,
-  options: {},
-  initialize: function(points, options){
-    this.setOptions(options);
-    this.points = points.map(function(point){
-      return new XYPoint(point, this);
-    }.bind(this));
-  }
+
+var XYCollection = new Native({
+  name: 'XYCollection',
+  legacy: Array,
 });
+
+XYCollection.implement({
+
+  // return max and min x and y values for all sets
+  range: function(){
+    var range = this[0].range();
+    if (this.length > 1) {
+      this.each(function(set){
+        var r = set.range();
+        if (range.x.max < r.x.max) range.x.max = r.x.max;
+        if (range.y.max < r.y.max) range.y.max = r.y.max;
+        if (range.x.min > r.x.min) range.x.min = r.x.min;
+        if (range.y.min > r.y.min) range.y.min = r.y.min;
+      });
+    }
+    return range;
+  }
+
+});
+
+var XYSet = new Class({
+
+  initialize: function(points, options){
+    this.points = points;
+    this.options = options;
+  },
+
+  // return max and min x and y values
+  range: function(){
+    var xmax = null, ymax = null;
+    var xmin = Infinity, ymin = Infinity;
+    this.points.each(function(point){
+      if (point.x > xmax) xmax = point.x;
+      if (point.y > ymax) ymax = point.y;
+      if (point.x < xmin) xmin = point.x;
+      if (point.y < ymin) ymin = point.y;
+    });
+    return {x: {max: xmax, min: xmin}, y: {max: ymax, min: ymin}};
+  }
+
+});
+
+XYSet.fromArray = function(pointsArray, options){
+  var set = new XYSet([], options);
+  set.points = pointsArray.map(function(point){
+    return XYPoint.fromArray(point, set);
+  });
+  return set;
+}
+
 var XYPoint = new Class({
-  initialize: function(point, set){
-    this.x = point[0];
-    this.y = point[1];
+  initialize: function(x, y, set){
+    this.x = x;
+    this.y = y;
     this.set = set; // reference to XYSet
   }
 });
+
+XYPoint.fromArray = function(coordArray, setReference){
+  return new XYPoint(coordArray[0], coordArray[1], setReference);
+}
 
 var Canvas = new Class({
 
@@ -85,8 +133,9 @@ var Canvas = new Class({
     height: 400
   },
 
-  initialize: function(options) {
-    this.setOptions(options);
+  initialize: function(options){
+    // FIXME: somehow, calling setOptions here makes all options dissapear
+    //this.setOptions(options);
   },
 
   buildElement: function(){
@@ -126,10 +175,48 @@ var Canvas = new Class({
     this.getCtx().clearRect(rect.x, rect.y, rect.width, rect.height);
   },
 
+  /* takes absolute page coords and translates it relative to canvas */
+  translateCoords: function(coords){
+    var pos = this.getPosition();
+    return {x: coords.x - pos.x, y: coords.y - pos.y};
+  },
+
+  /* get position of canvas element on page */
+  getPosition: function(){
+    if (!this._pos) this._pos = this.toElement().getPosition();
+    return this._pos;
+  },
+
+  /* checks if point is inside rect */
+  rectContainsPoint: function(rect, point){
+    return (point.x >= rect.x && point.x < rect.x + rect.width);
+  },
+
+  /* store current drawn graphics to a restorable state */
+  cacheCurrentState: function(){
+    var cache = new Image();
+    cache.addEvent('load', (function(){
+      this.cache = cache;
+    }).bind(this));
+  },
+
+  drawCache: function(ctx){
+    if (!this.cache) throw new Error('Cache empty, nothing to draw');
+    ctx.drawImage(this.cache, 0, 0);
+  },
+
+  clearCache: function(){
+    this.cache = null;
+  },
+
   /* mouse events */
   mouseEnter: function(event){},
   mouseLeave: function(event){},
   mouseMove: function(event){},
+  
+  /* subclass and do all drawing here */
+  redraw: function(){},
+
 });
 
 var Chart = new Class({
@@ -158,86 +245,30 @@ var Chart = new Class({
   },
 
   setDefaults: {},
-
-  xmax: null,
-  ymax: null,
-  xmin: Infinity,
-  ymin: Infinity,
-  cache: null,
-  sets: [],
   innerPadding: {x: 10, y: 10},
 
-  initialize: function(options) {
-    this.setOptions(options);
-    this.id = this.options.id || 'moochart_' + $time();
-    this._pos = null;
-    this._active = {set: null, point: null};
+  initialize: function(options){
+    this.parent(options);
+    this.sets = new XYCollection();
   },
 
-  resetPosition: function(){
-    this._pos = null;
-  },
-
-  getPosition: function(){
-    if (!this._pos && this.element)
-      this._pos = this.element.getPosition();
-    return this._pos;
-  },
-  
-  /* returns drawing context */
-  getCtx: function(){
-    return this.toElement().getContext('2d');
-  },
-  
-  /* takes absolute page coords and translates it relative to canvas */
-  translateCoords: function(coords){
-    var pos = this.getPosition();
-    return {
-      x: coords.x - pos.x,
-      y: coords.y - pos.y
-    };
-  },
-  
-  /* checks if point is inside rect */
-  rectContainsPoint: function(rect, point){
-    return (
-      point.x >= rect.x &&
-      point.x < rect.x + rect.width
-    );
-  },
-  
-  /* store current drawn graphics to a restorable state */
-  cacheCurrentState: function(){
-    var cache = new Image();
-    cache.addEvent('load', (function(){
-      this.cache = cache;
-    }).bind(this));
-  },
-  
-  clearCache: function(){
-    this.cache = null;
-  },
-  
-  /* add dataset to chart
-     dataset (standard) format: [[x, y], [x, y], ..] */
-  add: function(data, options){
+  /* add dataset to chart */
+  add: function(dataSet){
     this.dataSetsWillChange();
-    if (!options) var options = {};
     var defaults = {};
     for (var k in this.setDefaults) {
       defaults[k] = this.setDefaults[k];
     }
-    this.sets.unshift({
-      options: $extend(defaults, options),
-      data: data
-    });
+    dataSet.options = $extend(defaults, dataSet.options);
+    this.sets.unshift(dataSet);
     this.dataSetsDidChange();
   },
-  
+
   /* calculate drawable area (aka. dont' draw on labels) */
   getDrawRect: function(){
     var w = this.options.width, h = this.options.height;
     var p = this.options.padding;
+    console.log(this, this.options);
     return {
       x: p.left,
       y: p.top,
@@ -246,30 +277,10 @@ var Chart = new Class({
     };
   },
   
-  /* get min and max values for all sets */
-  getSetsRange: function(){
-    var xmax = this.xmax, ymax = this.ymax
-    var xmin = this.xmin, ymin = this.ymin;
-    this.sets.each(function(set){
-      for (var i=0; i < set.data.length; i++) {
-        var x = set.data[i][0], y = set.data[i][1];
-        if (x > xmax) xmax = x;
-        if (y > ymax) ymax = y;
-        if (x < xmin) xmin = x;
-        if (y < ymin) ymin = y;
-      }
-    });
-    return {
-      x: {max: xmax, min: xmin},
-      y: {max: ymax, min: ymin}
-    };
-  },
-  
   /* map sets data xy values to pixel coordinates */
   updatePoints: function(){
-    this.pointsWillChange();
     var rect = this.getDrawRect();
-    var range = this.getSetsRange();
+    var range = this.sets.range();
     var pointRect = {
       x: rect.x + this.innerPadding.x,
       y: rect.y + this.innerPadding.y,
@@ -285,8 +296,8 @@ var Chart = new Class({
     for (var set_idx=0; set_idx < this.sets.length; set_idx++) {
       var set = this.sets[set_idx];
       points[set_idx] = [];
-      for (var data_idx=0; data_idx < set.data.length; data_idx++) {
-        var xval = set.data[data_idx][0], yval = set.data[data_idx][1]; 
+      for (var data_idx=0; data_idx < set.points.length; data_idx++) {
+        var xval = set.points[data_idx].x, yval = set.points[data_idx].y; 
         var x = pointRect.x + ((xval - range.x.min) * xunit);
         var y = pointRect.y + (pointRect.height - (yval - range.y.min) * yunit);
         points[set_idx][data_idx] = [x, y];
@@ -302,11 +313,10 @@ var Chart = new Class({
       rect: pointRect,
       range: range
     };
-    this.pointsDidChange();
   },
   
   drawLabels: function(ctx, rect){
-    var range = this.getSetsRange();
+    var range = this.sets.range();
     
     var w = this.options.width;
     var h = this.options.height;
@@ -398,29 +408,24 @@ var Chart = new Class({
     if (this.sets.length == 0) return;
     var coords = this.translateCoords(event.page);
     var active = this.hitTest(coords);
-    if (active) {
-      if (active.set != this._active.set || active.point != this._active.point) {
-        this.redraw();
-        this.drawActive(this.getCtx(), active);
-        this._active = active;
-      }
-    } else if (this._active.set != null || this._active.point != null) {
-      this._active = {set: null, point: null};
+    if (active && active != this.active) {
+      this.redraw();
+      this.drawActive(this.getCtx(), active);
+      this.active = active;
+    } else if (this.active) {
+      this.active = null;
       this.redraw();
     }
   },
   mouseEnter: function(event){},
   mouseLeave: function(event){
-    this._active = {set: null, point: null};
+    this.active = null;
     this.redraw();
   },
   
-  hitTest: function(){ return false; },
+  hitTest: function(){ return null; },
   drawGraph: function(ctx, rect){},
   drawActive: function(ctx, point){},
-  
-  pointsWillChange: function(){},
-  pointsDidChange: function(){},
   
   dataSetsWillChange: function(){},
   dataSetsDidChange: function(){
