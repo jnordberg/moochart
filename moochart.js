@@ -251,6 +251,8 @@ var Chart = new Class({
 
   /* add dataset to chart */
   add: function(dataSet){
+    if ($type(dataSet) == 'array')
+      dataSet = new XYSet.fromArray(dataSet);
     this.dataSetsWillChange();
     var defaults = {};
     for (var k in this.setDefaults) {
